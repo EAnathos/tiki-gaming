@@ -50,6 +50,12 @@ HOST_UID=$(id -u) HOST_GID=$(id -g) docker compose -f quality/docker-compose.yml
 - **Seuils bloquants** (les SLO) : P95 < 300 ms et P99 < 500 ms pour chaque scénario, moins de 1 % d'erreurs, plus de
   99 % de vérifications réussies. Résumé dans `reports/k6-summary.json` (`reports/k6-<profil>.json` pour les autres).
 
+- Scénarios par jeu, lancés à la main (ou en CI pour Tic-Tac-Toe, job `performance`) :
+  `docker compose -f quality/docker-compose.yml run --rm k6 run /quality/k6/tic-tac-toe.js` vérifie
+  `POST /api/games/tic-tac-toe/verify` (scénario `tic_tac_toe_verify`, rapport `reports/k6-tic-tac-toe.json`) ;
+  idem pour `mastermind.js` et `game-2048.js`. Le backend Java doit tourner sur la machine (port 8080) ; en CI,
+  `TIKI_TICTACTOE_MAXVERIFICATIONSPERMINUTE` est relevé car k6 envoie depuis une seule adresse.
+
 ## ZAP : scan DAST
 
 ```bash
@@ -58,6 +64,9 @@ docker compose -f quality/docker-compose.yml run --rm zap zap-baseline.py \
   -t http://host.docker.internal:4173/ -c /zap/rules/rules.tsv -r zap-front.html
 docker compose -f quality/docker-compose.yml run --rm zap zap-baseline.py \
   -t http://host.docker.internal:8080/ -c /zap/rules/rules.tsv -r zap-api.html
+# Groupe OpenAPI du Tic-Tac-Toe (mêmes routes scannées en CI, job dast) :
+docker compose -f quality/docker-compose.yml run --rm zap zap-baseline.py \
+  -t http://host.docker.internal:8080/v3/api-docs/tic-tac-toe -c /zap/rules/rules.tsv -r zap-api-tic-tac-toe.html
 ```
 
 - Scan **baseline**, donc passif : ZAP explore et analyse les réponses sans envoyer d'attaque. Le backend local est
@@ -78,3 +87,12 @@ docker compose -f quality/docker-compose.yml run --rm zap zap-baseline.py \
 | 10049 | Mise en cache                  | Acceptée : informatif ; les réponses de l'API sont volontairement non stockables |
 | 10109 | Application web moderne        | Acceptée : informatif (un spider AJAX serait plus complet)                       |
 | 90004 | Cross-Origin-Embedder-Policy   | Acceptée : `require-corp` bloquerait les ressources Supabase sans en-tête CORP ; COOP `same-origin` suffit, l'app n'utilise pas `SharedArrayBuffer` |
+| 10010 | Cookie sans HttpOnly           | Acceptée : `XSRF-TOKEN` est volontairement lisible par le JS du front (`withHttpOnlyFalse`), jeton CSRF en double soumission |
+| 10054 | Cookie sans SameSite           | Acceptée : `XSRF-TOKEN`, idem ; la cookie de session est `SameSite=Lax`          |
+| 10096 | Timestamp Unix                 | Acceptée : timestamps des réponses JSON (`startedAt`…), informatifs             |
+| 10111 | Requête d'authentification     | Acceptée : `/api/auth/login`, `/api/auth/session` — endpoints publics attendus   |
+| 10112 | Réponse de gestion de session  | Acceptée : pose du cookie de session (HttpOnly + SameSite=Lax)                   |
+| 90022 | Erreur 500 applicative         | Acceptée : chemins littéraux « `{id}` » de l'import OpenAPI ; l'API renvoie un corps générique sans stacktrace |
+
+Les six dernières ne concernent que les scans ciblés API (ZAP importe `/v3/api-docs/...` et suit les routes) :
+les scans front et racine ne produisaient aucun avertissement avant.

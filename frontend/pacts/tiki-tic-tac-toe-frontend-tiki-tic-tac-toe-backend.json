@@ -1,0 +1,287 @@
+{
+  "consumer": {
+    "name": "tiki-tic-tac-toe-frontend"
+  },
+  "interactions": [
+    {
+      "description": "la vérification d’une partie de Tic-Tac-Toe gagnée par X",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "aucun joueur n’est connecté"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "moves": [
+              {
+                "column": 0,
+                "row": 0
+              },
+              {
+                "column": 0,
+                "row": 1
+              },
+              {
+                "column": 1,
+                "row": 0
+              },
+              {
+                "column": 1,
+                "row": 1
+              },
+              {
+                "column": 2,
+                "row": 0
+              }
+            ]
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "X-XSRF-TOKEN": [
+            "csrf-ttt"
+          ]
+        },
+        "matchingRules": {
+          "header": {
+            "X-XSRF-TOKEN": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/games/tic-tac-toe/verify"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "moves": 5,
+            "status": "X_WON",
+            "winner": "X"
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.moves": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.status": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.winner": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la vérification d’une partie non terminée",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "aucun joueur n’est connecté"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "moves": [
+              {
+                "column": 0,
+                "row": 0
+              },
+              {
+                "column": 1,
+                "row": 1
+              },
+              {
+                "column": 0,
+                "row": 2
+              }
+            ]
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "X-XSRF-TOKEN": [
+            "csrf-ttt"
+          ]
+        },
+        "matchingRules": {
+          "header": {
+            "X-XSRF-TOKEN": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/games/tic-tac-toe/verify"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "error": "La partie n'est pas terminée."
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.error": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 422
+      },
+      "type": "Synchronous/HTTP"
+    },
+    {
+      "description": "la vérification d’une partie truquée (case déjà occupée)",
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "aucun joueur n’est connecté"
+        }
+      ],
+      "request": {
+        "body": {
+          "content": {
+            "moves": [
+              {
+                "column": 0,
+                "row": 0
+              },
+              {
+                "column": 0,
+                "row": 0
+              }
+            ]
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ],
+          "X-XSRF-TOKEN": [
+            "csrf-ttt"
+          ]
+        },
+        "matchingRules": {
+          "header": {
+            "X-XSRF-TOKEN": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/games/tic-tac-toe/verify"
+      },
+      "response": {
+        "body": {
+          "content": {
+            "error": "La case est déjà occupée."
+          },
+          "contentType": "application/json",
+          "encoded": false
+        },
+        "headers": {
+          "Content-Type": [
+            "application/json"
+          ]
+        },
+        "matchingRules": {
+          "body": {
+            "$.error": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 422
+      },
+      "type": "Synchronous/HTTP"
+    }
+  ],
+  "metadata": {
+    "pact-js": {
+      "version": "17.1.4"
+    },
+    "pactRust": {
+      "ffi": "0.5.8",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    }
+  },
+  "provider": {
+    "name": "tiki-tic-tac-toe-backend"
+  }
+}

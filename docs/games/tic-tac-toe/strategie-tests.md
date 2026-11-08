@@ -16,6 +16,8 @@ parcours que seuls le navigateur et l'accessibilité peuvent valider.
 | Le score de session est perdu au redémarrage                    | Moyenne | Tests composant et E2E                         |
 | La grille ou l'annonce de victoire est inutilisable au clavier  | Moyenne | Tests composant et audit axe-core E2E          |
 | Le domaine diverge entre les implémentations Java et TypeScript | Moyenne | Suites de règles équivalentes et revue de code |
+| Une partie truquée ou non terminée est acceptée par la vérification serveur | Haute | 422 : `TicTacToeVerifyServiceTest`, `TicTacToeControllerTest`, contrat Pact |
+| L'archivage des résultats vérifiés est indisponible ou trop lent | Moyenne | Archivage non bloquant (journalisé) : `TicTacToeResultsChaosTest` (Toxiproxy, disjoncteur 503 fail-fast côté client), `SupabaseTicTacToeResultsClientIT` (Testcontainers), limite de débit 429 |
 
 ## Techniques appliquées
 
@@ -32,23 +34,30 @@ parcours que seuls le navigateur et l'accessibilité peuvent valider.
 
 ## Périmètre d'intégration
 
-Le Tic-Tac-Toe actuel est local : il n'envoie ni partie ni score à un endpoint et
-ne persiste pas d'état. Testcontainers, Pact, k6, Toxiproxy et ZAP ciblé ne
-peuvent donc pas produire une preuve fonctionnelle sans créer une nouvelle
-frontière applicative. Cette non-applicabilité est vérifiable dans le composant,
-le registre du jeu et l'absence de route `/api/games/tic-tac-toe`.
+Le jeu local reste pur en mémoire, mais une **frontière serveur** existe pour la vérification anti-triche :
+`POST /api/games/tic-tac-toe/verify` rejoue les coups envoyés par le front sur le moteur Java
+(`TicTacToeGame`), refuse une partie truquée ou non terminée (422), limite le débit par client (429) et archive
+le résultat vérifié dans `public.tic_tac_toe_results` (écriture `service_role` uniquement, RLS). Cette frontière
+est couverte par chaque niveau manquant auparavant :
 
-Si une exigence de classement, de reprise de partie ou de synchronisation réseau
-est ajoutée, cette décision devra être réévaluée : la nouvelle frontière devra
-alors être couverte par intégration réelle, contrat, charge et résilience.
+| Notion | Preuve | Commande / CI |
+|--------|--------|---------------|
+| Testcontainers (backend) | `SupabaseTicTacToeResultsClientIT` : vrai PostgreSQL + PostgREST, migrations rejouées, RLS et contraintes réelles | `mvn -Pintegration '-Dit.test=fr/tikigaming/games/tic_tac_toe/**/*IT' test-compile failsafe:integration-test failsafe:verify` (job CI `integration`) |
+| Testcontainers (front) | `tests/integration/tic-tac-toe.test.ts` : table, RLS (anon/authenticated refusés), contraintes CHECK | `npm run test:integration` (job CI `integration`) |
+| Pact | `tests/contract/tic-tac-toe.pact.test.ts` (consommateur) + `pacts/tiki-tic-tac-toe-frontend-tiki-tic-tac-toe-backend.json` + `TicTacToePactProviderTest` (fournisseur) | `npm run test:contract` puis `mvn test` (jobs CI `frontend`/`backend`) |
+| k6 | `quality/k6/tic-tac-toe.js` : scénario `tic_tac_toe_verify`, seuils SLO P95 < 300 ms / P99 < 500 ms | job CI `performance` |
+| Toxiproxy | `TicTacToeResultsChaosTest` : latence/coupure injectées entre le client et un faux PostgREST, timeout puis disjoncteur (503), refermeture | `mvn test` (ignoré sans Docker, exécuté en CI) |
+| ZAP | scan baseline du groupe OpenAPI `/v3/api-docs/tic-tac-toe` + tests CSRF (403 sans jeton) dans `TicTacToeControllerTest` | job CI `dast` |
 
 ## Commandes de preuve
 
 ```bash
 npm test -- --run src/games/tic-tac-toe
+npm run test:contract
 npm run rtm:check
 npx playwright test e2e/tic-tac-toe.spec.ts --project=chromium
 npm run lint
 npm run build
 npm run test:mutation -- --mutate src/games/tic-tac-toe/domain/game.ts
+cd backend && mvn -B test -Dtest='TicTacToe*' && mvn -Pintegration '-Dit.test=fr/tikigaming/games/tic_tac_toe/**/*IT' test-compile failsafe:integration-test failsafe:verify
 ```
