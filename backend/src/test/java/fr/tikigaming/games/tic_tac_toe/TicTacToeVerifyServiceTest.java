@@ -21,7 +21,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Le service rejoue les coups sur le vrai moteur ; le client d'archivage est réel mais branché sur un faux
@@ -30,7 +29,6 @@ import tools.jackson.databind.json.JsonMapper;
 class TicTacToeVerifyServiceTest {
 
     private static final String URL = "https://ttt-test.supabase.co";
-    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private MockRestServiceServer server;
     private TicTacToeVerifyService service;
@@ -45,7 +43,6 @@ class TicTacToeVerifyServiceTest {
         SupabaseTicTacToeResultsClient client = new SupabaseTicTacToeResultsClient(
                 builder,
                 props,
-                JSON,
                 new CircuitBreaker(
                         5, Duration.ofSeconds(30), Clock.systemUTC(), SupabaseTicTacToeResultsClient::isOutage));
         service = new TicTacToeVerifyService(client);

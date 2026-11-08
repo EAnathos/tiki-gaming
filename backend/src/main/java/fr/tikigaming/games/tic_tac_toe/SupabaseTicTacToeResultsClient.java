@@ -4,7 +4,6 @@ import fr.tikigaming.config.ApiException;
 import fr.tikigaming.config.TikiProperties;
 import fr.tikigaming.resilience.CircuitBreaker;
 import fr.tikigaming.resilience.CircuitOpenException;
-import java.io.InputStream;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Map;
@@ -13,13 +12,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 
 /**
  * Archive les parties de Tic-Tac-Toe vérifiées dans public.tic_tac_toe_results via PostgREST, avec la clé
@@ -43,45 +39,38 @@ public class SupabaseTicTacToeResultsClient {
     public SupabaseTicTacToeResultsClient(
             RestClient.Builder builder,
             TikiProperties props,
-            ObjectMapper mapper,
             @Value("${tiki.resilience.tic-tac-toe.failure-threshold:5}") int failureThreshold,
             @Value("${tiki.resilience.tic-tac-toe.open-duration:30s}") Duration openDuration) {
         this(
-                buildRest(builder, props, mapper),
+                builder,
+                props,
                 new CircuitBreaker(
                         failureThreshold, openDuration, Clock.systemUTC(), SupabaseTicTacToeResultsClient::isOutage));
     }
 
-    /**
-     * Câblage de production : Supabase monte PostgREST sous /rest/v1 (Kong) ; en test, le conteneur PostgREST
-     * sert à la racine, le RestClient est alors construit directement par le test.
-     */
-    private static RestClient buildRest(RestClient.Builder builder, TikiProperties props, ObjectMapper mapper) {
-        String serviceRoleKey = props.supabase().serviceRoleKey();
-        return builder.baseUrl(props.supabase().url() + "/rest/v1")
-                .defaultHeaders(h -> {
-                    h.set("apikey", serviceRoleKey);
-                    h.setBearerAuth(serviceRoleKey);
-                })
-                .defaultStatusHandler(HttpStatusCode::isError, (req, res) -> {
-                    log.warn(
-                            "PostgREST a refusé l'archivage d'une partie de Tic-Tac-Toe : {}",
-                            readError(mapper, res.getBody()));
-                    throw new ApiException(HttpStatus.BAD_GATEWAY, UNAVAILABLE);
-                })
-                .build();
-    }
-
-    /** Constructeur de test : même câblage que la production (base /rest/v1, clé service_role), disjoncteur injecté. */
-    SupabaseTicTacToeResultsClient(
-            RestClient.Builder builder, TikiProperties props, ObjectMapper mapper, CircuitBreaker breaker) {
-        this(buildRest(builder, props, mapper), breaker);
+    /** Constructeur de test : même câblage que la production, disjoncteur injecté. */
+    SupabaseTicTacToeResultsClient(RestClient.Builder builder, TikiProperties props, CircuitBreaker breaker) {
+        this(buildRest(builder, props), breaker);
     }
 
     /** Constructeur pour l'intégration réelle : PostgREST de test sert à la racine, sans préfixe /rest/v1. */
     SupabaseTicTacToeResultsClient(RestClient rest, CircuitBreaker breaker) {
         this.rest = rest;
         this.breaker = breaker;
+    }
+
+    /**
+     * Câblage de production : Supabase monte PostgREST sous /rest/v1 (Kong) ; en test, le conteneur PostgREST
+     * sert à la racine et le RestClient est construit directement par le test.
+     */
+    private static RestClient buildRest(RestClient.Builder builder, TikiProperties props) {
+        String serviceRoleKey = props.supabase().serviceRoleKey();
+        return builder.baseUrl(props.supabase().url() + "/rest/v1")
+                .defaultHeaders(h -> {
+                    h.set("apikey", serviceRoleKey);
+                    h.setBearerAuth(serviceRoleKey);
+                })
+                .build();
     }
 
     /** Archive le résultat d'une partie vérifiée. */
@@ -110,20 +99,15 @@ public class SupabaseTicTacToeResultsClient {
                     .retrieve()
                     .toBodilessEntity();
             return null;
+        } catch (HttpStatusCodeException refused) {
+            // Refus PostgREST (RLS, contrainte CHECK…) : journalisé avec son corps, jamais renvoyé au client.
+            log.warn(
+                    "PostgREST a refusé l'archivage d'une partie de Tic-Tac-Toe : {}",
+                    refused.getResponseBodyAsString());
+            throw new ApiException(HttpStatus.BAD_GATEWAY, UNAVAILABLE);
         } catch (ResourceAccessException e) {
             log.error("Supabase injoignable pendant l'archivage d'une partie de Tic-Tac-Toe", e);
             throw new ApiException(HttpStatus.BAD_GATEWAY, UNAVAILABLE);
-        }
-    }
-
-    /** Code SQLSTATE (ou PGRST) et message de l'erreur PostgREST ; journalisé, jamais renvoyé au client. */
-    private static String readError(ObjectMapper mapper, InputStream body) {
-        try {
-            JsonNode json = mapper.readTree(body);
-            if (json == null) return "";
-            return json.path("code").asString("") + " " + json.path("message").asString("");
-        } catch (JacksonException ignored) {
-            return "";
         }
     }
 }

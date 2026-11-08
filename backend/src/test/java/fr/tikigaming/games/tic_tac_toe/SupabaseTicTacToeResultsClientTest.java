@@ -53,7 +53,7 @@ class SupabaseTicTacToeResultsClientTest {
                 Duration.ofSeconds(30),
                 Clock.systemUTC(),
                 SupabaseTicTacToeResultsClient::isOutage);
-        client = new SupabaseTicTacToeResultsClient(builder, props, JSON, breaker);
+        client = new SupabaseTicTacToeResultsClient(builder, props, breaker);
     }
 
     private void recordXWin() {
