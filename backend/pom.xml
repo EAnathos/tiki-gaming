@@ -287,6 +287,7 @@
               <failIfNoTests>true</failIfNoTests>
               <systemPropertyVariables>
                 <dame.repositoryRoot>${project.basedir}/..</dame.repositoryRoot>
+                <ticTacToe.repositoryRoot>${project.basedir}/..</ticTacToe.repositoryRoot>
               </systemPropertyVariables>
             </configuration>
             <executions>

@@ -1,0 +1,74 @@
+package fr.tikigaming.games.tic_tac_toe;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doNothing;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+
+/** L'endpoint refuse (429) un client qui envoie trop de parties en une minute. Limite réduite à 2 pour le test. */
+@WebMvcTest(
+        value = TicTacToeController.class,
+        properties = {
+            "spring.autoconfigure.exclude="
+                    + "org.springframework.boot.security.oauth2.client.autoconfigure.servlet.OAuth2ClientWebSecurityAutoConfiguration",
+            "tiki.tic-tac-toe.max-verifications-per-minute=2"
+        })
+@AutoConfigureMockMvc(addFilters = false)
+@Import({TicTacToeVerifyService.class, TicTacToeVerifyRateLimiter.class})
+class TicTacToeControllerRateLimitTest {
+
+    private static final String X_WINS = "{\"moves\":[{\"row\":0,\"column\":0},{\"row\":1,\"column\":0},"
+            + "{\"row\":0,\"column\":1},{\"row\":1,\"column\":1},{\"row\":0,\"column\":2}]}";
+
+    @Autowired
+    private MockMvc mvc;
+
+    @MockitoBean
+    private SupabaseTicTacToeResultsClient results;
+
+    private ResultActions sendFrom(String address) throws Exception {
+        doNothing().when(results).record(any(), anyInt());
+        return mvc.perform(post("/api/games/tic-tac-toe/verify")
+                .with(request -> {
+                    request.setRemoteAddr(address);
+                    return request;
+                })
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(X_WINS));
+    }
+
+    @Test
+    void aClientOverTheLimitIsRefusedWith429() throws Exception {
+        // Arrange : le client a utilisé ses 2 vérifications de la minute
+        sendFrom("203.0.113.7").andExpect(status().isOk());
+        sendFrom("203.0.113.7").andExpect(status().isOk());
+
+        // Act + Assert
+        sendFrom("203.0.113.7")
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.error").value("Trop de parties envoyées : réessaie dans une minute."));
+    }
+
+    @Test
+    void anotherClientIsNotAffected() throws Exception {
+        // Arrange : un autre client a épuisé sa minute
+        sendFrom("198.51.100.9").andExpect(status().isOk());
+        sendFrom("198.51.100.9").andExpect(status().isOk());
+
+        // Act + Assert
+        sendFrom("198.51.100.9").andExpect(status().isTooManyRequests());
+        sendFrom("192.0.2.44").andExpect(status().isOk());
+    }
+}
