@@ -87,3 +87,12 @@ docker compose -f quality/docker-compose.yml run --rm zap zap-baseline.py \
 | 10049 | Mise en cache                  | Acceptée : informatif ; les réponses de l'API sont volontairement non stockables |
 | 10109 | Application web moderne        | Acceptée : informatif (un spider AJAX serait plus complet)                       |
 | 90004 | Cross-Origin-Embedder-Policy   | Acceptée : `require-corp` bloquerait les ressources Supabase sans en-tête CORP ; COOP `same-origin` suffit, l'app n'utilise pas `SharedArrayBuffer` |
+| 10010 | Cookie sans HttpOnly           | Acceptée : `XSRF-TOKEN` est volontairement lisible par le JS du front (`withHttpOnlyFalse`), jeton CSRF en double soumission |
+| 10054 | Cookie sans SameSite           | Acceptée : `XSRF-TOKEN`, idem ; la cookie de session est `SameSite=Lax`          |
+| 10096 | Timestamp Unix                 | Acceptée : timestamps des réponses JSON (`startedAt`…), informatifs             |
+| 10111 | Requête d'authentification     | Acceptée : `/api/auth/login`, `/api/auth/session` — endpoints publics attendus   |
+| 10112 | Réponse de gestion de session  | Acceptée : pose du cookie de session (HttpOnly + SameSite=Lax)                   |
+| 90022 | Erreur 500 applicative         | Acceptée : chemins littéraux « `{id}` » de l'import OpenAPI ; l'API renvoie un corps générique sans stacktrace |
+
+Les six dernières ne concernent que les scans ciblés API (ZAP importe `/v3/api-docs/...` et suit les routes) :
+les scans front et racine ne produisaient aucun avertissement avant.
