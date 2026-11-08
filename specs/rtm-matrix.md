@@ -60,6 +60,7 @@ du test Vitest ou Playwright, scénario Gherkin, méthode JUnit). La recette man
 | REQ-TTT-03 | Tic-Tac-Toe : une ligne, colonne ou diagonale complète termine la partie avec le bon gagnant | Règles du jeu |
 | REQ-TTT-04 | Tic-Tac-Toe : une grille pleine sans ligne gagnante affiche un match nul | Règles du jeu |
 | REQ-TTT-05 | Tic-Tac-Toe : le score de session compte les victoires X, les victoires O et les matchs nuls, et survit à Rejouer | Expérience joueur |
+| REQ-TTT-07 | Tic-Tac-Toe : une partie envoyée à `POST /api/games/tic-tac-toe/verify` est rejouée par le serveur, qui calcule seul le résultat ; coup illégal ou partie non terminée = 422, plus de 60 vérifications/minute par client = 429, archivage réservé au service_role (RLS), panne de stockage = 502 puis 503 (disjoncteur) | Anti-triche, OWASP API4, résilience (issue #141) |
 | REQ-PRIS-01 | Prismine : un tir coûte une dose d'huile et révèle le trajet du faisceau ; il est refusé sur un bord déjà exploré ou lampe vide | Règles du jeu |
 | REQ-PRIS-02 | Prismine : le faisceau suit les règles d'optique (quart de tour sur la face en biais, retour sur les faces plates, couleurs, obsidienne) sur des étages déterministes et solubles | Règles du jeu |
 | REQ-PRIS-03 | Prismine : une carte juste fait descendre et remplit la lampe ; une carte fausse coûte trois doses ou éteint la lampe, une carte contredite ne coûte rien | Règles du jeu |
@@ -204,6 +205,21 @@ du test Vitest ou Playwright, scénario Gherkin, méthode JUnit). La recette man
 | TC-TTT-08 | REQ-TTT-04 | erreur | BDD | `frontend/src/games/tic-tac-toe/features/tictactoe.feature` › Une case occupée ou des coordonnées invalides sont refusées | PASSED | — |
 | TC-TTT-09 | REQ-TTT-05 | nominal | composant | `frontend/src/games/tic-tac-toe/TicTacToeGame.test.tsx` › updates the session score after a win and keeps it after replay | PASSED | — |
 | TC-TTT-10 | REQ-TTT-05 | erreur | E2E Playwright | `frontend/e2e/tic-tac-toe.spec.ts` › rejoue une partie en conservant le score de session | PASSED | — |
+| TC-TTT-13 | REQ-TTT-07 | nominal | unitaire (backend) | `backend/src/test/java/fr/tikigaming/games/tic_tac_toe/TicTacToeVerifyServiceTest.java` › replaysAWinningGameAndArchivesTheServerSideResult | PASSED | — |
+| TC-TTT-14 | REQ-TTT-07 | erreur | unitaire (backend) | `backend/src/test/java/fr/tikigaming/games/tic_tac_toe/TicTacToeVerifyServiceTest.java` › anOccupiedCellIsRefusedWith422AndNothingIsArchived | PASSED | — |
+| TC-TTT-15 | REQ-TTT-07 | erreur | unitaire (backend) | `backend/src/test/java/fr/tikigaming/games/tic_tac_toe/TicTacToeVerifyServiceTest.java` › anUnfinishedGameIsRefusedWith422 | PASSED | — |
+| TC-TTT-16 | REQ-TTT-07 | nominal | intégration HTTP (MockMvc, CSRF) | `backend/src/test/java/fr/tikigaming/games/tic_tac_toe/TicTacToeControllerTest.java` › verifiesAWinningGameWithTheResultComputedByTheServer | PASSED | — |
+| TC-TTT-17 | REQ-TTT-07 | erreur | intégration HTTP (MockMvc) | `backend/src/test/java/fr/tikigaming/games/tic_tac_toe/TicTacToeControllerTest.java` › csrfIsRequiredForVerify | PASSED | — |
+| TC-TTT-18 | REQ-TTT-07 | erreur | intégration HTTP (MockMvc) | `backend/src/test/java/fr/tikigaming/games/tic_tac_toe/TicTacToeControllerRateLimitTest.java` › aClientOverTheLimitIsRefusedWith429 | PASSED | — |
+| TC-TTT-19 | REQ-TTT-07 | erreur | chaos (Toxiproxy) | `backend/src/test/java/fr/tikigaming/games/tic_tac_toe/TicTacToeResultsChaosTest.java` › aCutConnectionOpensTheCircuitAndItClosesAgainWhenTheStorageIsBack | PASSED | — |
+| TC-TTT-20 | REQ-TTT-07 | erreur | chaos (Toxiproxy) | `backend/src/test/java/fr/tikigaming/games/tic_tac_toe/TicTacToeResultsChaosTest.java` › aSlowStorageIsAbandonedAtTheTimeoutThenTheCircuitOpensAndAnswersAtOnce | PASSED | — |
+| TC-TTT-21 | REQ-TTT-07 | nominal | intégration (Testcontainers, PostgREST réel) | `backend/src/test/java/fr/tikigaming/games/tic_tac_toe/SupabaseTicTacToeResultsClientIT.java` › archivesAVverifiedResultWithTheServiceRole | PASSED | — |
+| TC-TTT-22 | REQ-TTT-07 | erreur | intégration (Testcontainers, RLS) | `backend/src/test/java/fr/tikigaming/games/tic_tac_toe/SupabaseTicTacToeResultsClientIT.java` › theAnonymousRoleCanNeitherReadNorWriteTheResults | PASSED | — |
+| TC-TTT-23 | REQ-TTT-07 | erreur | intégration base (Testcontainers, front) | `frontend/tests/integration/tic-tac-toe.test.ts` › un visiteur ne peut ni lire ni écrire | PASSED | — |
+| TC-TTT-24 | REQ-TTT-07 | nominal | contrat (Pact, consumer) | `frontend/tests/contract/tic-tac-toe.pact.test.ts` › vérification d’une partie gagnée par X | PASSED | — |
+| TC-TTT-25 | REQ-TTT-07 | erreur | contrat (Pact, consumer) | `frontend/tests/contract/tic-tac-toe.pact.test.ts` › partie truquée refusée avec 422 | PASSED | — |
+| TC-TTT-26 | REQ-TTT-07 | nominal | contrat (Pact, provider) | `backend/src/test/java/fr/tikigaming/games/tic_tac_toe/TicTacToePactProviderTest.java` › verifieLeContratDuFrontTicTacToe | PASSED | — |
+| TC-TTT-27 | REQ-TTT-07 | nominal | charge (k6) | `quality/k6/tic-tac-toe.js` › tic_tac_toe_verify | PASSED | — |
 | TC-RH-28 | REQ-RH-09 | nominal | contrat (front) | `frontend/src/games/rush-hour/contract.test.ts` › le jeu a exactement les niveaux du contrat, case par case | PASSED | — |
 | TC-RH-29 | REQ-RH-09 | nominal | contrat (backend) | `backend/src/test/java/fr/tikigaming/games/rush_hour/ContractTest.java` › serverReplaysTheContractGames | PASSED | — |
 | TC-RH-30 | REQ-RH-09 | erreur | contrat (front) | `frontend/src/games/rush-hour/contract.test.ts` › contrat partagé avec le serveur : parties rejouées | PASSED | — |

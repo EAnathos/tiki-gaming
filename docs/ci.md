@@ -95,7 +95,7 @@ ne tourne que si l'une de ses zones a changé :
 |-----|---------------------------------|
 | Frontend, E2E, Mutation (Stryker) | `frontend/**` |
 | Backend, Mutation (Pitest) | `backend/**` |
-| Integration | `frontend/**`, `supabase/**`, `quality/db-init/**`, `backend/pom.xml` ou le code du jeu SDV Civilisation (`backend/src/*/java/fr/tikigaming/games/sdv_civilisation/**`) |
+| Integration | `frontend/**`, `supabase/**`, `quality/db-init/**`, `backend/pom.xml` ou le code des jeux SDV Civilisation, Dames et Tic-Tac-Toe (`backend/src/*/java/fr/tikigaming/games/{sdv_civilisation,dame,tic_tac_toe}/**`) |
 | Performance (k6) | `frontend/**`, `backend/**`, `supabase/**` ou `quality/**` |
 | DAST (ZAP) | `frontend/**`, `backend/**` ou `quality/**` |
 | SonarQube Cloud | `frontend/**` ou `backend/**` |
@@ -255,11 +255,13 @@ Deux vérifications passent d'abord, sans base de données :
 L'ordre des dates, lui, n'a pas d'importance : une migration plus ancienne que la dernière appliquée est appliquée
 normalement.
 
-Le même palier exécute ensuite les `*IT` Java Dames :
-`mvn -B -Pintegration '-Dit.test=fr/tikigaming/games/dame/**/*IT' test-compile failsafe:integration-test failsafe:verify` depuis `backend/`.
-Ces tests vérifient l'adaptateur avec PostgreSQL et PostgREST réels ; leurs rapports
+Le même palier exécute ensuite les `*IT` Java Dames et Tic-Tac-Toe :
+`mvn -B -Pintegration '-Dit.test=fr/tikigaming/games/dame/**/*IT' test-compile failsafe:integration-test failsafe:verify` et
+`mvn -B -Pintegration '-Dit.test=fr/tikigaming/games/tic_tac_toe/**/*IT' test-compile failsafe:integration-test failsafe:verify` depuis `backend/`.
+Ces tests vérifient l'adaptateur avec PostgreSQL et PostgREST réels (archivage des parties vérifiées de
+Tic-Tac-Toe : table `tic_tac_toe_results`, RLS, contraintes) ; leurs rapports
 sont publiés dans `rapport-integration-backend`. Ils tournent après le palier 1,
-avant mutation/E2E, sans rejouer toute la suite unitaire. Le filtre cible Dames :
+avant mutation/E2E, sans rejouer toute la suite unitaire. Le filtre cible Dames et Tic-Tac-Toe :
 l'étape d'intégration SDV existante est conservée et n'est pas rejouée par Failsafe.
 
 **Testcontainers** démarre un vrai PostgreSQL (`supabase/postgres` 17.11, la même image que la production) dans un
@@ -342,24 +344,27 @@ profils (`smoke`, `stress`, `spike`, `soak`) se lancent en local ; objectifs et 
 | `leaderboard` | 100 req/s | top 10 du classement, en visiteur |
 | `submit_score` | 20 req/s | envoi de score par un joueur connecté |
 | `session` | 50 req/s | `GET /api/auth/session` du backend |
+| `rush_hour_verify` | 20 req/s | vérification serveur d'une partie de Rush Hour |
+| `tic_tac_toe_verify` | 10 req/s | `POST /api/games/tic-tac-toe/verify` (script dédié `quality/k6/tic-tac-toe.js`) |
 
-Seuils bloquants (`quality/k6/lobby.js`), qui sont les SLO : **P95 < 300 ms** et **P99 < 500 ms** pour chaque
-scénario, **moins de 1 %** d'erreurs et **plus de 99 %** de vérifications réussies. Résumé en artefact
-(`rapport-k6`).
+Seuils bloquants (`quality/k6/lobby.js` et `quality/k6/tic-tac-toe.js`), qui sont les SLO : **P95 < 300 ms** et
+**P99 < 500 ms** pour chaque scénario, **moins de 1 %** d'erreurs et **plus de 99 %** de vérifications réussies.
+Résumé en artefact (`rapport-k6`, fichiers `k6-summary.json` et `k6-tic-tac-toe.json`).
 
 ## 12. Scan de sécurité dynamique (`DAST (ZAP baseline)`)
 
 La CI construit le front de production (avec ses en-têtes de sécurité) et démarre le backend, puis **OWASP ZAP**
-explore les deux (front sur le port 4173, API sur le port 8080) et analyse leurs réponses : en-têtes manquants,
-CSP trop permissive, clickjacking…
+explore le front (port 4173), l'API (port 8080) et le groupe OpenAPI du Tic-Tac-Toe (`/v3/api-docs/tic-tac-toe`)
+et analyse leurs réponses : en-têtes manquants, CSP trop permissive, clickjacking…
 
 - Scan **passif** (*baseline*) : ZAP observe, il n'attaque pas.
 - Chaque type d'alerte est décidé dans `quality/zap/rules.tsv` : `FAIL` pour les problèmes corrigés (une
   régression fait échouer la CI), `IGNORE` pour les risques acceptés, chacun avec sa justification
   ([quality/README.md](../quality/README.md#zap--scan-dast)).
 - Rapports HTML en artefact (`rapport-zap`).
-- Les deux scans (front et API) tournent en parallèle. Le backend est le jar construit par `Backend` (artefact
-  `backend-jar`, lancé avec `java -jar`, comme pour k6) ; si `Backend` a été sauté, il est compilé dans le job.
+- Les trois scans (front, API, groupe Tic-Tac-Toe) tournent en parallèle. Le backend est le jar construit par
+  `Backend` (artefact `backend-jar`, lancé avec `java -jar`, comme pour k6) ; si `Backend` a été sauté, il est
+  compilé dans le job.
 
 ## 13. Vulnérabilités des dépendances (`Security`)
 

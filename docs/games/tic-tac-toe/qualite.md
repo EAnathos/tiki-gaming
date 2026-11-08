@@ -2,12 +2,36 @@
 
 ## Périmètre
 
-Les mesures portent sur le domaine TypeScript pur du Tic-Tac-Toe et ses scénarios
-Vitest-Cucumber. Aucun navigateur, réseau, stockage ou service externe n'est utilisé.
+Les mesures portent sur le domaine TypeScript pur du Tic-Tac-Toe, ses scénarios
+Vitest-Cucumber et le client d'appel à l'API de vérification (`api.ts`, testé avec un `fetch` simulé).
+Aucun navigateur, réseau, stockage ou service externe n'est utilisé dans ces tests unitaires.
+
+Les niveaux supérieurs sont couverts ailleurs (voir [strategie-tests.md](strategie-tests.md)) : contrat Pact
+(`tests/contract/tic-tac-toe.pact.test.ts`), intégration base (`tests/integration/tic-tac-toe.test.ts`,
+Testcontainers), HTTP/CSRF/rate-limit côté backend (`TicTacToeControllerTest`), chaos Toxiproxy
+(`TicTacToeResultsChaosTest`), IT Testcontainers (`SupabaseTicTacToeResultsClientIT`), charge k6
+(`quality/k6/tic-tac-toe.js`) et DAST ZAP (groupe `/v3/api-docs/tic-tac-toe`).
 
 ## Résultats
 
-Commande de couverture ciblée :
+Commande de couverture ciblée (domaine + client API) :
+
+```bash
+npx vitest run src/games/tic-tac-toe --coverage \
+  --coverage.include='src/games/tic-tac-toe/**' \
+  --coverage.thresholds.lines=0 --coverage.thresholds.functions=0 \
+  --coverage.thresholds.statements=0 --coverage.thresholds.branches=0
+```
+
+| Mesure | Résultat | Objectif |
+|---|---:|---:|
+| Tests du jeu (BDD 22 + composant 4 + api 7) | 33/33 | 100 % |
+| Lignes | 95,65 % (44/46) | >= 80 % |
+| Fonctions | 96,15 % (25/26) | >= 80 % |
+| Instructions | 94,82 % (55/58) | >= 80 % |
+| Branches | 85,71 % (48/56) | >= 80 % |
+
+Couverture du seul domaine (BDD) :
 
 ```bash
 npx vitest run src/games/tic-tac-toe/features/tictactoe.steps.test.ts --coverage \
