@@ -31,14 +31,6 @@ import tools.jackson.databind.JsonNode;
         description = "Corps invalide (coups absents, coordonnées hors grille…)",
         content = @Content(schema = @Schema(implementation = ApiError.class)))
 @ApiResponse(responseCode = "403", description = "Jeton CSRF absent ou invalide")
-@ApiResponse(
-        responseCode = "502",
-        description = "Archivage temporairement indisponible",
-        content = @Content(schema = @Schema(implementation = ApiError.class)))
-@ApiResponse(
-        responseCode = "503",
-        description = "Archivage indisponible : disjoncteur ouvert",
-        content = @Content(schema = @Schema(implementation = ApiError.class)))
 public class TicTacToeController {
 
     /** Une case visée par un coup. */

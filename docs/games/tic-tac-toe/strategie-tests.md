@@ -17,7 +17,7 @@ parcours que seuls le navigateur et l'accessibilité peuvent valider.
 | La grille ou l'annonce de victoire est inutilisable au clavier  | Moyenne | Tests composant et audit axe-core E2E          |
 | Le domaine diverge entre les implémentations Java et TypeScript | Moyenne | Suites de règles équivalentes et revue de code |
 | Une partie truquée ou non terminée est acceptée par la vérification serveur | Haute | 422 : `TicTacToeVerifyServiceTest`, `TicTacToeControllerTest`, contrat Pact |
-| L'archivage des résultats vérifiés est indisponible ou trop lent | Moyenne | 502 puis 503 (disjoncteur) : `TicTacToeResultsChaosTest` (Toxiproxy), `SupabaseTicTacToeResultsClientIT` (Testcontainers), limite de débit 429 |
+| L'archivage des résultats vérifiés est indisponible ou trop lent | Moyenne | Archivage non bloquant (journalisé) : `TicTacToeResultsChaosTest` (Toxiproxy, disjoncteur 503 fail-fast côté client), `SupabaseTicTacToeResultsClientIT` (Testcontainers), limite de débit 429 |
 
 ## Techniques appliquées
 

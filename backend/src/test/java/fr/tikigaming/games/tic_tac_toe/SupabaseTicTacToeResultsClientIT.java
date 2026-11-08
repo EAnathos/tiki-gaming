@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import fr.tikigaming.config.ApiException;
-import fr.tikigaming.config.TikiProperties;
 import fr.tikigaming.resilience.CircuitBreaker;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -39,13 +38,13 @@ class SupabaseTicTacToeResultsClientIT {
     }
 
     private static SupabaseTicTacToeResultsClient client(String jwt) {
-        TikiProperties props = new TikiProperties(
-                "http://localhost:5173",
-                new TikiProperties.Supabase(DATABASE.restUrl(), "anon-key", jwt, "jwt-secret", Duration.ofHours(1)));
+        // PostgREST du conteneur sert à la racine : pas de préfixe /rest/v1 (réservé à Kong en production).
+        RestClient rest = RestClient.builder()
+                .baseUrl(DATABASE.restUrl())
+                .defaultHeaders(h -> h.setBearerAuth(jwt))
+                .build();
         return new SupabaseTicTacToeResultsClient(
-                RestClient.builder(),
-                props,
-                JSON,
+                rest,
                 new CircuitBreaker(
                         5, Duration.ofSeconds(30), Clock.systemUTC(), SupabaseTicTacToeResultsClient::isOutage));
     }

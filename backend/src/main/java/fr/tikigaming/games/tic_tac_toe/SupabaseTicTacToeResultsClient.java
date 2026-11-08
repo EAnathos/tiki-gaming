@@ -47,18 +47,18 @@ public class SupabaseTicTacToeResultsClient {
             @Value("${tiki.resilience.tic-tac-toe.failure-threshold:5}") int failureThreshold,
             @Value("${tiki.resilience.tic-tac-toe.open-duration:30s}") Duration openDuration) {
         this(
-                builder,
-                props,
-                mapper,
+                buildRest(builder, props, mapper),
                 new CircuitBreaker(
                         failureThreshold, openDuration, Clock.systemUTC(), SupabaseTicTacToeResultsClient::isOutage));
     }
 
-    SupabaseTicTacToeResultsClient(
-            RestClient.Builder builder, TikiProperties props, ObjectMapper mapper, CircuitBreaker breaker) {
-        this.breaker = breaker;
+    /**
+     * Câblage de production : Supabase monte PostgREST sous /rest/v1 (Kong) ; en test, le conteneur PostgREST
+     * sert à la racine, le RestClient est alors construit directement par le test.
+     */
+    private static RestClient buildRest(RestClient.Builder builder, TikiProperties props, ObjectMapper mapper) {
         String serviceRoleKey = props.supabase().serviceRoleKey();
-        this.rest = builder.baseUrl(props.supabase().url())
+        return builder.baseUrl(props.supabase().url() + "/rest/v1")
                 .defaultHeaders(h -> {
                     h.set("apikey", serviceRoleKey);
                     h.setBearerAuth(serviceRoleKey);
@@ -70,6 +70,18 @@ public class SupabaseTicTacToeResultsClient {
                     throw new ApiException(HttpStatus.BAD_GATEWAY, UNAVAILABLE);
                 })
                 .build();
+    }
+
+    /** Constructeur de test : même câblage que la production (base /rest/v1, clé service_role), disjoncteur injecté. */
+    SupabaseTicTacToeResultsClient(
+            RestClient.Builder builder, TikiProperties props, ObjectMapper mapper, CircuitBreaker breaker) {
+        this(buildRest(builder, props, mapper), breaker);
+    }
+
+    /** Constructeur pour l'intégration réelle : PostgREST de test sert à la racine, sans préfixe /rest/v1. */
+    SupabaseTicTacToeResultsClient(RestClient rest, CircuitBreaker breaker) {
+        this.rest = rest;
+        this.breaker = breaker;
     }
 
     /** Archive le résultat d'une partie vérifiée. */
@@ -92,7 +104,7 @@ public class SupabaseTicTacToeResultsClient {
     private Void post(GameStatus status, int moves) {
         try {
             rest.post()
-                    .uri("/rest/v1/tic_tac_toe_results")
+                    .uri("/tic_tac_toe_results")
                     .header("Prefer", "return=minimal")
                     .body(Map.of("status", status.name(), "moves", moves))
                     .retrieve()

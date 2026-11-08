@@ -7,7 +7,6 @@ import eu.rekawek.toxiproxy.Proxy;
 import eu.rekawek.toxiproxy.ToxiproxyClient;
 import eu.rekawek.toxiproxy.model.ToxicDirection;
 import fr.tikigaming.config.ApiException;
-import fr.tikigaming.config.TikiProperties;
 import fr.tikigaming.resilience.CircuitBreaker;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -25,7 +24,6 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 import org.testcontainers.Testcontainers;
 import org.testcontainers.toxiproxy.ToxiproxyContainer;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Chaos engineering : Toxiproxy (dans Docker) s'intercale entre le client d'archivage des parties de Tic-Tac-Toe
@@ -42,7 +40,6 @@ class TicTacToeResultsChaosTest {
     private static final Duration LATENCY = Duration.ofMillis(1_200);
     private static final Duration OPEN_DURATION = Duration.ofMillis(800);
     private static final int THRESHOLD = 3;
-    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private static HttpServer fakePostgrest;
     private static final AtomicInteger RECEIVED = new AtomicInteger();
@@ -57,7 +54,7 @@ class TicTacToeResultsChaosTest {
 
         // Faux PostgREST sur la machine hôte : accepte chaque archivage (201).
         fakePostgrest = HttpServer.create(new InetSocketAddress(0), 0);
-        fakePostgrest.createContext("/rest/v1/tic_tac_toe_results", exchange -> {
+        fakePostgrest.createContext("/tic_tac_toe_results", exchange -> {
             RECEIVED.incrementAndGet();
             exchange.getRequestBody().readAllBytes();
             exchange.sendResponseHeaders(201, -1);
@@ -84,12 +81,12 @@ class TicTacToeResultsChaosTest {
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(HttpClient.newHttpClient());
         factory.setReadTimeout(READ_TIMEOUT); // en application : spring.http.clients.read-timeout
         String url = "http://" + toxiproxy.getHost() + ":" + toxiproxy.getMappedPort(8666);
-        TikiProperties props = new TikiProperties(
-                "http://localhost:5173",
-                new TikiProperties.Supabase(url, "anon", "service", "jwt-secret", Duration.ofHours(1)));
         breaker = new CircuitBreaker(
                 THRESHOLD, OPEN_DURATION, Clock.systemUTC(), SupabaseTicTacToeResultsClient::isOutage);
-        client = new SupabaseTicTacToeResultsClient(RestClient.builder().requestFactory(factory), props, JSON, breaker);
+        // PostgREST factice à la racine (pas de préfixe /rest/v1 hors production).
+        RestClient rest =
+                RestClient.builder().requestFactory(factory).baseUrl(url).build();
+        client = new SupabaseTicTacToeResultsClient(rest, breaker);
         RECEIVED.set(0);
     }
 

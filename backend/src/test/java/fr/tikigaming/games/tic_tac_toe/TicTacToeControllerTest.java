@@ -161,24 +161,15 @@ class TicTacToeControllerTest {
     }
 
     @Test
-    void aStorageOutageIsAnsweredWith502() throws Exception {
+    void aStorageOutageDoesNotBlockTheVerification() throws Exception {
+        // Archivage best-effort : la vérification (rejeu serveur) répond 200 même si le stockage est en panne.
         doThrow(new ApiException(HttpStatus.BAD_GATEWAY, SupabaseTicTacToeResultsClient.UNAVAILABLE))
                 .when(results)
                 .record(any(), anyInt());
 
         mvc.perform(verifyRequest(X_WINS))
-                .andExpect(status().isBadGateway())
-                .andExpect(jsonPath("$.error").value(SupabaseTicTacToeResultsClient.UNAVAILABLE));
-    }
-
-    @Test
-    void anOpenCircuitIsAnsweredWith503AtOnce() throws Exception {
-        doThrow(new ApiException(HttpStatus.SERVICE_UNAVAILABLE, SupabaseTicTacToeResultsClient.UNAVAILABLE))
-                .when(results)
-                .record(any(), anyInt());
-
-        mvc.perform(verifyRequest(X_WINS))
-                .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.error").value(SupabaseTicTacToeResultsClient.UNAVAILABLE));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("X_WON"))
+                .andExpect(jsonPath("$.winner").value("X"));
     }
 }

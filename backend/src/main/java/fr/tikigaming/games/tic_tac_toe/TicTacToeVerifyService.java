@@ -2,6 +2,8 @@ package fr.tikigaming.games.tic_tac_toe;
 
 import fr.tikigaming.config.ApiException;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -13,6 +15,8 @@ import org.springframework.stereotype.Service;
 public class TicTacToeVerifyService {
 
     static final String NOT_FINISHED = "La partie n'est pas terminée.";
+
+    private static final Logger log = LoggerFactory.getLogger(TicTacToeVerifyService.class);
 
     private final SupabaseTicTacToeResultsClient results;
 
@@ -32,7 +36,15 @@ public class TicTacToeVerifyService {
         if (game.status() == GameStatus.IN_PROGRESS) {
             throw new ApiException(HttpStatus.UNPROCESSABLE_CONTENT, NOT_FINISHED);
         }
-        results.record(game.status(), moves.size());
+        // Archivage best-effort : la vérification anti-triche (le rejoue serveur) ne dépend pas du stockage
+        // d'audit ; une panne y est journalisée, le disjoncteur du client la coupe vite (voir chaos Toxiproxy).
+        try {
+            results.record(game.status(), moves.size());
+        } catch (ApiException outage) {
+            log.warn(
+                    "Archivage du résultat de Tic-Tac-Toe indisponible (HTTP {}), vérification maintenue",
+                    outage.status());
+        }
         return TicTacToeVerifyResponse.of(game, moves.size());
     }
 }
