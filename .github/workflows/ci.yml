@@ -84,6 +84,9 @@ jobs:
               - 'backend/src/test/java/fr/tikigaming/games/sdv_civilisation/**'
               - 'backend/src/main/java/fr/tikigaming/games/dame/**'
               - 'backend/src/test/java/fr/tikigaming/games/dame/**'
+              # Archivage des parties vérifiées de Tic-Tac-Toe, testé contre la vraie base (IT Testcontainers).
+              - 'backend/src/main/java/fr/tikigaming/games/tic_tac_toe/**'
+              - 'backend/src/test/java/fr/tikigaming/games/tic_tac_toe/**'
               - 'quality/db-init/**'
             quality:
               - *ci
@@ -274,6 +277,10 @@ jobs:
       - name: Persistance Java Dames (PostgreSQL et PostgREST réels)
         working-directory: backend
         run: mvn -B -Pintegration '-Dit.test=fr/tikigaming/games/dame/**/*IT' test-compile failsafe:integration-test failsafe:verify
+      # Archivage des parties vérifiées de Tic-Tac-Toe : même image, mêmes migrations, vrai PostgREST (classe *IT).
+      - name: Archivage Java Tic-Tac-Toe (PostgreSQL et PostgREST réels)
+        working-directory: backend
+        run: mvn -B -Pintegration '-Dit.test=fr/tikigaming/games/tic_tac_toe/**/*IT' test-compile failsafe:integration-test failsafe:verify
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -431,6 +438,8 @@ jobs:
       # k6 envoie toutes ses parties de Rush Hour depuis une seule adresse : on mesure la capacité du serveur, pas la
       # limite par client (testée par ResultRateLimiterTest), qu'on relève donc pour ce job.
       TIKI_RUSHHOUR_MAXRESULTSPERMINUTE: 1000000
+      # Idem pour la vérification des parties de Tic-Tac-Toe (testée par TicTacToeVerifyRateLimiterTest).
+      TIKI_TICTACTOE_MAXVERIFICATIONSPERMINUTE: 1000000
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/node-modules
@@ -457,11 +466,15 @@ jobs:
           for i in $(seq 1 90); do curl -sf http://localhost:8080/api/auth/session && curl -sf -o /dev/null http://localhost:54330/ && break; sleep 2; done
       # Seuils bloquants (quality/k6/lobby.js) : P95 < 300 ms par scénario, moins de 1 % d'erreurs.
       - run: mkdir -p quality/reports && HOST_UID=$(id -u) HOST_GID=$(id -g) docker compose -f quality/docker-compose.yml run --rm k6
+      # Scénario ciblé Tic-Tac-Toe : vérification serveur d'une partie (mêmes seuils SLO, quality/k6/tic-tac-toe.js).
+      - run: HOST_UID=$(id -u) HOST_GID=$(id -g) docker compose -f quality/docker-compose.yml run --rm k6 run --quiet /quality/k6/tic-tac-toe.js
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: rapport-k6
-          path: quality/reports/k6-summary.json
+          path: |
+            quality/reports/k6-summary.json
+            quality/reports/k6-tic-tac-toe.json
 
   dast:
     name: DAST (ZAP baseline)
@@ -500,20 +513,22 @@ jobs:
           if [ -n "$jar" ]; then (java -jar "$jar" > backend.log 2>&1 &); else (cd backend && mvn -B -q spring-boot:run > ../backend.log 2>&1 &); fi
           for i in $(seq 1 90); do curl -sf -o /dev/null http://localhost:4173/ && curl -sf http://localhost:8080/api/auth/session && break; sleep 2; done
       # Scan passif. Échoue sur une alerte non acceptée ; les risques acceptés sont justifiés dans quality/zap/rules.tsv.
-      # Les deux cibles sont scannées en parallèle ; le job échoue si l'un des deux scans échoue.
+      # Trois cibles en parallèle : le front, l'API (racine) et le groupe OpenAPI du Tic-Tac-Toe
+      # (/v3/api-docs/tic-tac-toe) ; le job échoue si l'un des scans échoue.
       - name: ZAP baseline
         run: |
           mkdir -p quality/reports && chmod 777 quality/reports
           pids=()
-          for target in front:4173 api:8080; do
+          for target in front=http://host.docker.internal:4173/ api=http://host.docker.internal:8080/ api-tic-tac-toe=http://host.docker.internal:8080/v3/api-docs/tic-tac-toe; do
+            name="${target%%=*}"; url="${target#*=}"
             docker compose -f quality/docker-compose.yml run --rm zap zap-baseline.py \
-              -t "http://host.docker.internal:${target#*:}/" -c /zap/rules/rules.tsv -r "zap-${target%%:*}.html" \
-              > "zap-${target%%:*}.log" 2>&1 &
+              -t "$url" -c /zap/rules/rules.tsv -r "zap-${name}.html" \
+              > "zap-${name}.log" 2>&1 &
             pids+=($!)
           done
           status=0
           for pid in "${pids[@]}"; do wait "$pid" || status=1; done
-          cat zap-front.log zap-api.log
+          cat zap-front.log zap-api.log zap-api-tic-tac-toe.log
           exit $status
       - uses: actions/upload-artifact@v7
         if: always()

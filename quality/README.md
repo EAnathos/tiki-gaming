@@ -50,6 +50,12 @@ HOST_UID=$(id -u) HOST_GID=$(id -g) docker compose -f quality/docker-compose.yml
 - **Seuils bloquants** (les SLO) : P95 < 300 ms et P99 < 500 ms pour chaque scénario, moins de 1 % d'erreurs, plus de
   99 % de vérifications réussies. Résumé dans `reports/k6-summary.json` (`reports/k6-<profil>.json` pour les autres).
 
+- Scénarios par jeu, lancés à la main (ou en CI pour Tic-Tac-Toe, job `performance`) :
+  `docker compose -f quality/docker-compose.yml run --rm k6 run /quality/k6/tic-tac-toe.js` vérifie
+  `POST /api/games/tic-tac-toe/verify` (scénario `tic_tac_toe_verify`, rapport `reports/k6-tic-tac-toe.json`) ;
+  idem pour `mastermind.js` et `game-2048.js`. Le backend Java doit tourner sur la machine (port 8080) ; en CI,
+  `TIKI_TICTACTOE_MAXVERIFICATIONSPERMINUTE` est relevé car k6 envoie depuis une seule adresse.
+
 ## ZAP : scan DAST
 
 ```bash
@@ -58,6 +64,9 @@ docker compose -f quality/docker-compose.yml run --rm zap zap-baseline.py \
   -t http://host.docker.internal:4173/ -c /zap/rules/rules.tsv -r zap-front.html
 docker compose -f quality/docker-compose.yml run --rm zap zap-baseline.py \
   -t http://host.docker.internal:8080/ -c /zap/rules/rules.tsv -r zap-api.html
+# Groupe OpenAPI du Tic-Tac-Toe (mêmes routes scannées en CI, job dast) :
+docker compose -f quality/docker-compose.yml run --rm zap zap-baseline.py \
+  -t http://host.docker.internal:8080/v3/api-docs/tic-tac-toe -c /zap/rules/rules.tsv -r zap-api-tic-tac-toe.html
 ```
 
 - Scan **baseline**, donc passif : ZAP explore et analyse les réponses sans envoyer d'attaque. Le backend local est
